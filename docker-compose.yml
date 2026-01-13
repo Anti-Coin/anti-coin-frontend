@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  # TSDB
+  influxdb:
+    image: influxdb:2.7-alpine
+    container_name: coin-influxdb
+    ports:
+      - "8086:8086"
+    volumes:
+      - ./influxdb_data:/var/lib/influxdb2
+      - ./influxdb_config:/etc/influxdb2
+    environment:
+      - DOCKER_INFLUXDB_INIT_MODE=setup
+      - DOCKER_INFLUXDB_INIT_USERNAME=admin
+      - DOCKER_INFLUXDB_INIT_PASSWORD=adminpassword
+      - DOCKER_INFLUXDB_INIT_ORG=coin # 조직 이름
+      - DOCKER_INFLUXDB_INIT_BUCKET=market_data # 버킷 이름 (DB 명)
+      - DOCKER_INFLUXDB_INIT_ADMIN_TOKEN=my-super-secret-auth-token
+    restart: always

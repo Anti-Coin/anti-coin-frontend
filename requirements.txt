@@ -4,3 +4,5 @@ prophet
 matplotlib
 plotly
 streamlit
+influxdb-client
+python-dotenv
