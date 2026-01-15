@@ -17,7 +17,6 @@ jobs:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.KEY }}
-          rm: true
           source: "."
           target: "/home/${{ secrets.USERNAME }}/coin"
           
@@ -29,14 +28,6 @@ jobs:
           key: ${{ secrets.KEY }}
           script: |
             cd /home/${{ secrets.USERNAME }}/coin
-                        
-            if [ ! -f .env ]; then
-              echo "Error: .env file not found on server!"
-              exit 1
-            fi
-            
-            echo "Building and Starting Containers..."
             docker compose up -d --build
-            
             # 불필요한 이미지 정리
             docker image prune -f
