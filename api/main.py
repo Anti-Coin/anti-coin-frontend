@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 
 # load_dotenv()
 
-app = FastAPI(title="ProphetOps API", version="1.0.0")
+app = FastAPI(title="Coin Predict API", version="1.0.0")
 
 # CORS 설정
 app.add_middleware(
