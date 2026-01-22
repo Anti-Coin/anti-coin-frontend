@@ -11,11 +11,12 @@ COPY . /app
 
 EXPOSE 8000
 
+# 추후에 Nginx를 두어서 Gunicorn 대신 연결 관리를 하게 하고, 타임아웃을 줄이도록...
 CMD ["gunicorn", "api.main:app", \
     "--workers", "3", \
     "--worker-class", "uvicorn.workers.UvicornWorker", \
     "--bind", "0.0.0.0:8000", \
-    "--backlog", "2048", \
+    # "--backlog", "2048", \
     "--timeout", "120", \
     "--keep-alive", "5", \
     "--access-logfile", "-", \
