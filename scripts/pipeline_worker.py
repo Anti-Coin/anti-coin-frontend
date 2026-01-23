@@ -7,11 +7,7 @@ import os
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-
-# from dotenv import load_dotenv
-
-# 환경 설정 및 연결
-# load_dotenv() # docker compose environment로 관리
+import json
 
 INFLUXDB_URL = os.getenv("INFLUXDB_URL")
 INFLUXDB_TOKEN = os.getenv("INFLUXDB_TOKEN")
@@ -20,6 +16,9 @@ INFLUXDB_BUCKET = os.getenv("INFLUXDB_BUCKET")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 MODELS_DIR = BASE_DIR / "models"
+STATIC_DIR = BASE_DIR / "static"
+os.makedirs(MODELS_DIR, exist_ok=True)
+os.makedirs(STATIC_DIR, exist_ok=True)
 
 # 수집 대상 및 설정
 TARGET_COINS = ["BTC/USDT", "ETH/USDT", "XRP/USDT", "SOL/USDT", "DOGE/USDT"]
@@ -110,7 +109,8 @@ def run_prediction_and_save(write_api, symbol):
             model = model_from_json(fin.read())
 
         # 예측 (현재 시점부터 24시간)
-        now = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0)
+        now = datetime.now(timezone.utc)
+        # .replace(minute=0, second=0, microsecond=0) => UTC 통일
         future = pd.DataFrame({"ds": pd.date_range(start=now, periods=24, freq="H")})
         future["ds"] = future["ds"].dt.tz_localize(None)
 
@@ -119,18 +119,44 @@ def run_prediction_and_save(write_api, symbol):
         forecast = model.predict(future)
 
         # 필요한 데이터만 추출
-        now = datetime.now(timezone.utc)
         next_24h = forecast[forecast["ds"] > now.replace(tzinfo=None)].head(24).copy()
 
         if next_24h.empty:
             print(f"[{symbol}] 예측 범위 생성 실패.")
             return
 
-        # 저장
+        # 저장 (SSG)
+        export_data = next_24h[["ds", "yhat", "yhat_lower", "yhat_upper"]]
+        export_data["ds"] = export_data["ds"].dt.tz_localize(None)
+
+        export_data.rename(
+            columns={
+                "ds": "timestamp",
+                "yhat": "price",
+                "yhat_lower": "lower_bound",
+                "yhat_upper": "upper_bound",
+            },
+            inplace=True,
+        )
+
+        json_output = {
+            "symbol": symbol,
+            "updated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),  # 생성 시점 기록
+            "forecast": export_data.to_dict(orient="records"),
+        }
+
+        # 파일 저장 (덮어쓰기)
+        safe_symbol = symbol.replace("/", "_")
+        file_path = STATIC_DIR / f"prediction_{safe_symbol}.json"
+
+        with open(file_path, "w") as f:
+            json.dump(json_output, f, indent=2)
+
+        print(f"[{symbol}] SSG 파일 생성 완료: {file_path}")
+
+        # 저장(DB)
         next_24h = next_24h[["ds", "yhat", "yhat_lower", "yhat_upper"]]
         next_24h.rename(columns={"ds": "timestamp"}, inplace=True)
-
-        next_24h["timestamp"] = next_24h["timestamp"].dt.tz_localize(None)
         next_24h.set_index("timestamp", inplace=True)  # InfluxDB는 index가 timestamp
         next_24h["symbol"] = symbol
 
