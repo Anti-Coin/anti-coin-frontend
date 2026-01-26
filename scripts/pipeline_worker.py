@@ -16,7 +16,7 @@ INFLUXDB_BUCKET = os.getenv("INFLUXDB_BUCKET")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 MODELS_DIR = BASE_DIR / "models"
-STATIC_DIR = BASE_DIR / "static"
+STATIC_DIR = BASE_DIR / "static_data"
 os.makedirs(MODELS_DIR, exist_ok=True)
 os.makedirs(STATIC_DIR, exist_ok=True)
 
