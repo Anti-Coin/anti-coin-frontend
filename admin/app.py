@@ -77,7 +77,7 @@ def plot_chart(symbol, history_df, forecast_df):
         fig.add_trace(
             go.Scatter(
                 x=forecast_df["timestamp"],
-                y=forecast_df["yhat"],
+                y=forecast_df["price"],
                 mode="lines",
                 name="Prediction",
                 line=dict(color="#ff00ff", width=2, dash="dot"),
@@ -89,7 +89,7 @@ def plot_chart(symbol, history_df, forecast_df):
         fig.add_trace(
             go.Scatter(
                 x=forecast_df["timestamp"],
-                y=forecast_df["yhat_upper"],
+                y=forecast_df["upper_bound"],
                 mode="lines",
                 line=dict(width=0),
                 showlegend=False,
@@ -99,7 +99,7 @@ def plot_chart(symbol, history_df, forecast_df):
         fig.add_trace(
             go.Scatter(
                 x=forecast_df["timestamp"],
-                y=forecast_df["yhat_lower"],
+                y=forecast_df["lower_bound"],
                 mode="lines",
                 line=dict(width=0),
                 fill="tonexty",  # Upper와 Lower 사이를 채움
