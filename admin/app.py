@@ -8,45 +8,50 @@ import time
 
 st.set_page_config(page_title="Coin Predict MVP", layout="wide")
 
-API_BASE_URL = os.getenv("API_URL", "http://localhost:8000")
+BASE_URL = os.getenv("API_URL", "http://nginx")
 
 
-@st.cache_data(ttl=60)  # 1분 동안 캐싱
+@st.cache_data(ttl=60)
 def get_history_data(symbol):
-    """API 서버에서 과거 데이터 조회"""
+    """Nginx에서 과거 데이터 정적 파일(SSG) 조회"""
     try:
-        url = f"{API_BASE_URL}/history/{symbol}"
-        response = requests.get(url)
+        # 파일명 규칙 적용 (BTC/USDT -> BTC_USDT)
+        safe_symbol = symbol.replace("/", "_")
+        url = f"{BASE_URL}/static/history_{safe_symbol}.json"
+
+        response = requests.get(url, timeout=5)
         response.raise_for_status()
 
         data = response.json()
-        df = pd.DataFrame(data["data"])
+        df = pd.DataFrame(data["data"])  # SSG 구조에 맞게 수정
 
-        # 날짜 변환 (UTC 문자열 -> datetime)
+        # 날짜 변환 (ISO 8601 -> datetime)
         df["timestamp"] = pd.to_datetime(df["timestamp"])
-        return df
+        return df, data.get("updated_at")  # 생성 시점 반환
     except Exception as e:
-        st.error(f"Failed to fetch history: {e}")
-        return pd.DataFrame()
+        st.error(f"Failed to fetch history file: {e}")
+        return pd.DataFrame(), None
 
 
 @st.cache_data(ttl=60)
 def get_forecast_data(symbol):
-    """API 서버에서 예측 데이터 조회"""
+    """Nginx에서 예측 데이터 정적 파일(SSG) 조회"""
     try:
-        url = f"{API_BASE_URL}/predict/{symbol}"
-        response = requests.get(url)
+        safe_symbol = symbol.replace("/", "_")
+        url = f"{BASE_URL}/static/prediction_{safe_symbol}.json"
+
+        response = requests.get(url, timeout=5)
         response.raise_for_status()
 
         data = response.json()
-        df = pd.DataFrame(data["forecast"])
+        df = pd.DataFrame(data["forecast"])  # SSG 구조에 맞게 수정
 
         # 날짜 변환
         df["timestamp"] = pd.to_datetime(df["timestamp"])
-        return df, data["execution_time"]
+        return df, data.get("updated_at")
     except Exception as e:
-        st.error(f"Failed to fetch forecast: {e}")
-        return pd.DataFrame(), 0.0
+        st.error(f"Failed to fetch prediction file: {e}")
+        return pd.DataFrame(), None
 
 
 # 차트 그리기 함수
@@ -137,8 +142,8 @@ with col1:
 
     # API 호출
     with st.spinner("Calling API Server..."):
-        history_df = get_history_data(symbol)
-        forecast_df, exec_time = get_forecast_data(symbol)
+        history_df, h_updated = get_history_data(symbol)
+        forecast_df, f_updated = get_forecast_data(symbol)
 
     if not history_df.empty:
         # KPI 계산
@@ -157,40 +162,50 @@ with col2:
     st.subheader("System Metrics")
     if not history_df.empty:
         st.metric("Current Price", f"${last_close:,.2f}", f"{change_pct:.2f}%")
-        st.metric("DB Records", f"{len(history_df)} rows", "Last 30 Days")
 
     st.divider()
 
-    st.subheader("Model Inference")
-    if not forecast_df.empty:
-        st.metric("Inference Time", f"{exec_time:.4f} sec", "CPU Bound")
+    st.subheader("Freshness Check")
+    # '데이터 생성 시점'을 표시
+    if f_updated:
+        # UTC 시간 문자열 파싱
+        updated_dt = pd.to_datetime(f_updated)
+        now_dt = pd.Timestamp.now(tz="UTC")
+        diff_minutes = (now_dt - updated_dt).total_seconds() / 60
 
-        # 예측 요약
-        last_pred = forecast_df.iloc[-1]["yhat"]
-        start_pred = forecast_df.iloc[0]["yhat"]
+        st.write(f"Updated: {f_updated}")
+
+        if diff_minutes < 65:  # 1시간 + 5분 여유
+            st.success(f"Healthy ({int(diff_minutes)} min ago)")
+        else:
+            st.error(f"Stale Data ({int(diff_minutes)} min ago)")
+    else:
+        st.error("Time info missing")
+
+    if not forecast_df.empty:
+        last_pred = forecast_df.iloc[-1]["price"]
+        start_pred = forecast_df.iloc[0]["price"]
         pred_change = last_pred - start_pred
 
         st.write("Next 24h Trend:")
         if pred_change > 0:
-            st.success(f"📈 Bullish (+${pred_change:,.2f})")
+            st.success(f"📈 +${pred_change:,.2f}")
         else:
-            st.error(f"📉 Bearish (-${abs(pred_change):,.2f})")
-    else:
-        st.error("Model Server Error")
+            st.error(f"📉 -${abs(pred_change):,.2f}")
 
-# 하단: 원본 데이터 확인 (디버깅용)
-with st.expander("View Raw JSON Response"):
+with st.expander("View Raw JSON Content"):
     st.json(
         {
             "history_tail": (
-                history_df.tail(3).to_dict(orient="records")
+                history_df.tail(2).to_dict(orient="records")
                 if not history_df.empty
                 else {}
             ),
             "forecast_head": (
-                forecast_df.head(3).to_dict(orient="records")
+                forecast_df.head(2).to_dict(orient="records")
                 if not forecast_df.empty
                 else {}
             ),
+            "metadata": {"history_updated": h_updated, "forecast_updated": f_updated},
         }
     )
