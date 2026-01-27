@@ -77,7 +77,7 @@ def plot_chart(symbol, history_df, forecast_df):
         fig.add_trace(
             go.Scatter(
                 x=forecast_df["timestamp"],
-                y=forecast_df["yhat"],
+                y=forecast_df["price"],
                 mode="lines",
                 name="Prediction",
                 line=dict(color="#ff00ff", width=2, dash="dot"),
@@ -89,7 +89,7 @@ def plot_chart(symbol, history_df, forecast_df):
         fig.add_trace(
             go.Scatter(
                 x=forecast_df["timestamp"],
-                y=forecast_df["yhat_upper"],
+                y=forecast_df["upper_bound"],
                 mode="lines",
                 line=dict(width=0),
                 showlegend=False,
@@ -99,7 +99,7 @@ def plot_chart(symbol, history_df, forecast_df):
         fig.add_trace(
             go.Scatter(
                 x=forecast_df["timestamp"],
-                y=forecast_df["yhat_lower"],
+                y=forecast_df["lower_bound"],
                 mode="lines",
                 line=dict(width=0),
                 fill="tonexty",  # Upper와 Lower 사이를 채움
@@ -142,8 +142,8 @@ with col1:
 
     # API 호출
     with st.spinner("Calling API Server..."):
-        history_df = get_history_data(symbol)
-        forecast_df, exec_time = get_forecast_data(symbol)
+        history_df, h_updated = get_history_data(symbol)
+        forecast_df, f_updated = get_forecast_data(symbol)
 
     if not history_df.empty:
         # KPI 계산
@@ -162,40 +162,50 @@ with col2:
     st.subheader("System Metrics")
     if not history_df.empty:
         st.metric("Current Price", f"${last_close:,.2f}", f"{change_pct:.2f}%")
-        st.metric("DB Records", f"{len(history_df)} rows", "Last 30 Days")
 
     st.divider()
 
-    st.subheader("Model Inference")
-    if not forecast_df.empty:
-        st.metric("Inference Time", f"{exec_time:.4f} sec", "CPU Bound")
+    st.subheader("Freshness Check")
+    # '데이터 생성 시점'을 표시
+    if f_updated:
+        # UTC 시간 문자열 파싱
+        updated_dt = pd.to_datetime(f_updated)
+        now_dt = pd.Timestamp.now(tz="UTC")
+        diff_minutes = (now_dt - updated_dt).total_seconds() / 60
 
-        # 예측 요약
-        last_pred = forecast_df.iloc[-1]["yhat"]
-        start_pred = forecast_df.iloc[0]["yhat"]
+        st.write(f"Updated: {f_updated}")
+
+        if diff_minutes < 65:  # 1시간 + 5분 여유
+            st.success(f"Healthy ({int(diff_minutes)} min ago)")
+        else:
+            st.error(f"Stale Data ({int(diff_minutes)} min ago)")
+    else:
+        st.error("Time info missing")
+
+    if not forecast_df.empty:
+        last_pred = forecast_df.iloc[-1]["price"]
+        start_pred = forecast_df.iloc[0]["price"]
         pred_change = last_pred - start_pred
 
         st.write("Next 24h Trend:")
         if pred_change > 0:
-            st.success(f"📈 Bullish (+${pred_change:,.2f})")
+            st.success(f"📈 +${pred_change:,.2f}")
         else:
-            st.error(f"📉 Bearish (-${abs(pred_change):,.2f})")
-    else:
-        st.error("Model Server Error")
+            st.error(f"📉 -${abs(pred_change):,.2f}")
 
-# 하단: 원본 데이터 확인 (디버깅용)
-with st.expander("View Raw JSON Response"):
+with st.expander("View Raw JSON Content"):
     st.json(
         {
             "history_tail": (
-                history_df.tail(3).to_dict(orient="records")
+                history_df.tail(2).to_dict(orient="records")
                 if not history_df.empty
                 else {}
             ),
             "forecast_head": (
-                forecast_df.head(3).to_dict(orient="records")
+                forecast_df.head(2).to_dict(orient="records")
                 if not forecast_df.empty
                 else {}
             ),
+            "metadata": {"history_updated": h_updated, "forecast_updated": f_updated},
         }
     )
