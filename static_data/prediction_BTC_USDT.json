@@ -1,0 +1,18 @@
+{
+  "updated_at": "2026-02-02T04:50:00",
+  "symbol": "BTC/USDT",
+  "forecast": [
+    {
+      "timestamp": "2026-02-02T05:00:00Z",
+      "yhat": 43500.5,
+      "yhat_lower": 43000.2,
+      "yhat_upper": 44000.8
+    },
+    {
+      "timestamp": "2026-02-02T06:00:00Z",
+      "yhat": 43800.0,
+      "yhat_lower": 43200.5,
+      "yhat_upper": 44500.2
+    }
+  ]
+}
