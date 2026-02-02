@@ -1,4 +1,4 @@
-const BASE_URL = 'http://168.107.56.63:8000';
+const BASE_URL = 'http://localhost:8000';
 
 export async function getHistory(symbol) {
     const res = await fetch(`${BASE_URL}/history/${encodeURIComponent(symbol)}`);
