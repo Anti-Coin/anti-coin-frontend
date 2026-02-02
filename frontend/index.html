@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Coin Predict AI Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🪙 동원이의 코인 예측 </h1>
+            <div class="controls">
+                <select id="coinSelect">
+                    <option value="BTC/USDT">BTC/USDT (비트코인)</option>
+                    <option value="ETH/USDT">ETH/USDT (이더리움)</option>
+                    <option value="XRP/USDT">XRP/USDT (리플)</option>
+                    <option value="SOL/USDT">SOL/USDT (솔라나)</option>
+                    <option value="DOGE/USDT">DOGE/USDT (도지코인)</option>
+                </select>
+                <button id="fetchBtn">조회하기</button>
+            </div>
+        </header>
+
+        <main>
+            <div id="status">상태: 대기 중</div>
+            <div class="chart-container">
+                <canvas id="predictionChart"></canvas>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/app.js" type="module"></script>
+</body>
+</html>
