@@ -1,4 +1,6 @@
-const BASE_URL = 'http://localhost:8000';
+import { CONFIG } from './config.js'; 
+
+const BASE_URL = CONFIG.API_BASE_URL;
 
 export async function getHistory(symbol) {
     const res = await fetch(`${BASE_URL}/history/${encodeURIComponent(symbol)}`);
