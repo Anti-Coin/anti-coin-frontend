@@ -51,7 +51,6 @@ function renderChart(chartData, symbol) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            // interaction을 잠시 꺼서 드래그 이벤트가 툴팁에 가로채이지 않게 설정
             interaction: { mode: 'index', intersect: false },
             plugins: {
                 zoom: {
@@ -62,7 +61,7 @@ function renderChart(chartData, symbol) {
                     pan: {
                         enabled: true,
                         mode: 'xy',
-                        threshold: 5, // 5픽셀 이상 움직이면 드래그로 인식
+                        threshold: 5,
                     },
                     zoom: {
                         wheel: { enabled: true, speed: 0.1 },
@@ -78,9 +77,8 @@ function renderChart(chartData, symbol) {
         }
     });
 
-    // --- 드래그를 강제로 활성화하기 위한 브라우저 이벤트 차단 ---
     canvas.style.cursor = 'grab';
-    canvas.style.touchAction = 'none'; // 모바일/패드에서 브라우저 스크롤 방지
+    canvas.style.touchAction = 'none'; //브라우저 스크롤 방지
 
     canvas.onmousedown = (e) => { 
         canvas.style.cursor = 'grabbing';
@@ -90,10 +88,10 @@ function renderChart(chartData, symbol) {
         canvas.style.cursor = 'grab'; 
     };
 
-    // 우클릭 메뉴가 드래그를 방해하지 않도록 차단
+    // 우클릭 메뉴
     canvas.oncontextmenu = (e) => e.preventDefault();
 
-    // 더블 클릭 시 초기화
+    // 더블클릭 초기화
     canvas.ondblclick = () => { if (myChart) myChart.resetZoom(); };
 }
 
