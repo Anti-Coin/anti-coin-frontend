@@ -26,8 +26,14 @@
 | FE-011 | P2 | W5 | 최적화(조건부) | 병목 지표 개선 근거 확보 | 최적화 커밋 롤백 |
 
 ## 3) Current Focus
-1. Active Wave: W1
-2. Active Tasks: `FE-001`, `FE-002`, `FE-003`
+1. Active Wave: W2
+2. Active Tasks: `FE-004`, `FE-005`
+
+## 3.1) Execution Log
+1. 2026-03-02: W1 baseline 구현 완료 (`FE-001`, `FE-002`, `FE-003`)
+2. Evidence:
+   - `npm install` 완료
+   - `npm run build` 성공 (`dist/index.html`, `dist/assets/*.css`, `dist/assets/*.js`)
 
 ## 4) Verification Baseline per Task
 1. 기능 경로 1개 이상 + 실패 경로 1개 이상
