@@ -3,18 +3,19 @@ import axios from 'axios';
 import { RefreshCw, Coins, ChevronRight } from 'lucide-react';
 import './styles/App.css';
 
-const EXCHANGE_RATE = 1380;
+const EXCHANGE_RATE = 1380; 
 
 export default function App() {
   const [allEntries, setAllEntries] = useState([]);
   const [selectedSymbol, setSelectedSymbol] = useState('BTC/USDT');
   const [price, setPrice] = useState(null);
-  const [combinedData, setCombinedData] = useState([]);
+  const [history, setHistory] = useState([98000000, 98100000, 97900000, 98450000]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  
   const [tooltip, setTooltip] = useState(null);
 
   const fetchAllData = async () => {
-    setLoading(true);
     try {
       const res = await axios.get(`http://localhost/static/manifest.json?t=${Date.now()}`);
       const entries = res.data.entries || [];
@@ -22,49 +23,39 @@ export default function App() {
       
       const currentEntry = entries.find(e => e.symbol === selectedSymbol);
       if (currentEntry) {
-        const safeSymbol = selectedSymbol.replace('/', '_');
+        const isFresh = (currentEntry.prediction?.status || currentEntry.status) === 'fresh';
         
-        try {
-          const [histRes, predRes] = await Promise.allSettled([
-            axios.get(`http://localhost/static/history_${safeSymbol}_1h.json?t=${Date.now()}`),
-            axios.get(`http://localhost/static/prediction_${safeSymbol}_1h.json?t=${Date.now()}`)
-          ]);
-
-          let hData = [];
-          let pData = [];
-
-          if (histRes.status === 'fulfilled') {
-            hData = (histRes.value.data.data || []).slice(-24).map(d => ({
-              // 🔥 어떤 이름으로 오든 다 잡아내는 무적의 그물
-              val: Number(d.close || d.price || d.value || 0) * EXCHANGE_RATE,
-              type: 'history',
-              label: '과거 기록'
-            }));
+        if (isFresh) {
+          const safeSymbol = selectedSymbol || 'BTC/USDT';
+          const fileName = `prediction_${safeSymbol.replace('/', '_')}_1h.json`; 
+          try {
+            const priceRes = await axios.get(`http://localhost/static/${fileName}?t=${Date.now()}`);
+            const data = priceRes.data;
+            
+            if (data.forecast && Array.isArray(data.forecast) && data.forecast.length > 0) {
+              const currentData = data.forecast[0]; 
+              const dollarPrice = currentData.yhat || currentData.close || currentData.price || 0;
+              const krwPrice = dollarPrice * EXCHANGE_RATE;
+              
+              setPrice(krwPrice);
+              
+              const krwHistory = data.forecast.map(item => {
+                const val = item.yhat || item.close || item.price || 0;
+                return val * EXCHANGE_RATE;
+              });
+              setHistory(krwHistory.slice(0, 14)); 
+            }
+          } catch (e) {
+            console.error("가격 파일 가져오기 실패:", e);
           }
-
-          if (predRes.status === 'fulfilled') {
-            pData = (predRes.value.data.forecast || []).slice(0, 12).map(d => {
-              // 🔥 실수로 빼먹었던 price 복구 완료!
-              const rawVal = d.yhat || d.close || d.price || d.value || 0; 
-              return {
-                val: Number(rawVal) * EXCHANGE_RATE,
-                type: 'prediction',
-                label: 'AI 예측'
-              };
-            });
-          }
-
-          // 🔥 만약 예측이 없으면 과거 마지막 가격을 현재가로 표시
-          const latestPrice = pData.length > 0 ? pData[0].val : (hData.length > 0 ? hData[hData.length-1].val : null);
-          setPrice(!isNaN(latestPrice) ? latestPrice : null);
-          setCombinedData([...hData, ...pData]);
-
-        } catch (e) {
-          console.error("파일 로드 중 오류:", e);
+        } else {
+           setPrice(null); 
         }
       }
       setLoading(false);
+      setError(null);
     } catch (err) {
+      setError("데이터 연결 확인 중...");
       setLoading(false);
     }
   };
@@ -73,104 +64,150 @@ export default function App() {
     fetchAllData();
   }, [selectedSymbol]);
 
-  const { histPath, predPath, points, nowX } = useMemo(() => {
-    const validData = combinedData.filter(d => !isNaN(d.val) && d.val !== null);
-    if (!validData.length) return { histPath: "", predPath: "", points: [], nowX: 0 };
-    
+  const safeSymbol = selectedSymbol || '---';
+  const displaySymbol = safeSymbol.split('/')[0];
+  const strokeColor = safeSymbol.includes('BTC') ? "#7dd3fc" : "#f472b6";
+
+  // 🔥 기존 buildLinePath 함수 대신, 마우스 좌표를 계산하도록 업그레이드!
+  const { path, points } = useMemo(() => {
+    if (!history || history.length < 2) return { path: "", points: [] };
     const width = 300;
     const height = 60;
-    const values = validData.map(d => d.val);
-    const min = Math.min(...values);
-    const max = Math.max(...values);
+    const min = Math.min(...history);
+    const max = Math.max(...history);
     const range = (max - min) || 1;
 
-    const pts = validData.map((d, i) => ({
-      x: (i / (validData.length - 1)) * width,
-      y: height - ((d.val - min) / range) * height,
-      val: d.val,
-      type: d.type,
-      label: d.label
-    }));
+    const pts = history.map((val, i) => {
+      const x = (i / (history.length - 1)) * width;
+      const y = height - ((val - min) / range) * height;
+      return { x, y, val, i };
+    });
 
-    const hPts = pts.filter(p => p.type === 'history');
-    const pPts = pts.filter(p => p.type === 'prediction');
-    const pPathPts = hPts.length > 0 ? [hPts[hPts.length - 1], ...pPts] : pPts;
-
-    return {
-      histPath: hPts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" "),
-      predPath: pPathPts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" "),
-      points: pts,
-      nowX: hPts.length > 0 ? hPts[hPts.length - 1].x : 0
-    };
-  }, [combinedData]);
-
-  const strokeColor = selectedSymbol.includes('BTC') ? "#7dd3fc" : "#f472b6";
+    const p = pts.map((pt, i) => `${i === 0 ? "M" : "L"} ${pt.x} ${pt.y}`).join(" ");
+    return { path: p, points: pts };
+  }, [history]);
 
   return (
     <div className="app-container">
+      <div className="tabs-container lg:hidden no-scrollbar">
+        {allEntries.map((entry) => (
+          <button
+            key={entry.key}
+            onClick={() => setSelectedSymbol(entry.symbol || 'BTC/USDT')}
+            className={`tab-button ${selectedSymbol === entry.symbol ? 'active' : 'inactive'}`}
+          >
+            {entry.symbol ? entry.symbol.split('/')[0] : 'Coin'}
+          </button>
+        ))}
+      </div>
+
       <main className="main-layout">
         <aside className="coin-list-side">
           <h2 className="text-2xl font-black mb-6 opacity-90 tracking-tight">Market Overview</h2>
-          {allEntries.map((entry) => (
-            <div key={entry.key} onClick={() => setSelectedSymbol(entry.symbol)} className={`mini-coin-card ${selectedSymbol === entry.symbol ? 'active' : ''}`}>
-              <div>
-                <p className="font-bold text-lg">{entry.symbol.split('/')[0]}</p>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">1h interval</p>
+          {allEntries.map((entry) => {
+            const status = (entry.prediction?.status || entry.status || 'missing').toLowerCase();
+            const isFresh = status === 'fresh';
+
+            return (
+              <div 
+                key={entry.key}
+                onClick={() => setSelectedSymbol(entry.symbol || 'BTC/USDT')}
+                className={`mini-coin-card ${selectedSymbol === entry.symbol ? 'active' : ''}`}
+              >
+                <div>
+                  <p className="font-bold text-lg">{entry.symbol ? entry.symbol.split('/')[0] : '---'}</p>
+                  <p className="text-[10px] text-slate-400 font-bold">1H INTERVAL</p>
+                </div>
+                <div className="text-right flex items-center gap-4">
+                  <div>
+                    <p className={`text-[10px] font-bold ${isFresh ? 'text-emerald-400' : 'text-slate-500'}`}>
+                      ● {status.toUpperCase()}
+                    </p>
+                  </div>
+                  <ChevronRight size={16} className="opacity-30" />
+                </div>
               </div>
-              <ChevronRight size={16} className="opacity-30" />
-            </div>
-          ))}
+            );
+          })}
         </aside>
 
         <div className="glass-card">
           <div className="flex justify-between items-start mb-10 relative z-10">
-            <div className="bg-gradient-to-br from-orange-400 to-orange-600 p-4 rounded-2xl shadow-lg"><Coins size={28} /></div>
+            <div className="bg-gradient-to-br from-orange-400 to-orange-600 p-4 rounded-2xl shadow-lg">
+              <Coins size={28} />
+            </div>
             <div className="bg-emerald-500/20 px-3 py-1.5 rounded-full border border-emerald-500/30">
-              <span className="text-emerald-400 flex items-center text-[10px] font-black uppercase tracking-wider animate-pulse">
+              <span className="text-emerald-400 flex items-center text-[10px] font-black uppercase tracking-wider">
+                <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full mr-2 animate-pulse" />
                 Live Terminal
               </span>
             </div>
           </div>
           
           <div className="mb-8 relative z-10">
-            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">{selectedSymbol.split('/')[0]} Price Index</p>
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">
+              {displaySymbol} Price Index
+            </p>
             <div className="flex items-baseline gap-2">
               <span className="text-5xl font-black tracking-tighter text-white">
-                {price !== null && !isNaN(price) ? price.toLocaleString('ko-KR', { maximumFractionDigits: 0 }) : "---"}
+                {price !== null ? price.toLocaleString('ko-KR', { maximumFractionDigits: price < 1000 ? 2 : 0 }) : "---"}
               </span>
               <span className="text-slate-500 font-bold text-lg">KRW</span>
             </div>
           </div>
 
+          {/* 🔥 툴팁이 추가된 그래프 영역 */}
           <div className="mb-10 opacity-80 relative z-10">
-            <svg className="w-full h-16 overflow-visible" viewBox="0 0 300 60" onMouseLeave={() => setTooltip(null)}>
-              <line x1={nowX} y1="0" x2={nowX} y2="60" className="now-line" />
+            <svg 
+              className="w-full h-16 overflow-visible" 
+              viewBox="0 0 300 60"
+              onMouseLeave={() => setTooltip(null)} // 마우스가 밖으로 나가면 툴팁 끄기
+            >
+              <path d={path} fill="none" stroke={strokeColor} strokeWidth="3" strokeLinecap="round" className="sparkline-path" />
               
-              <path d={histPath} fill="none" className="path-history" />
-              <path d={predPath} fill="none" stroke={strokeColor} className="path-prediction" />
-              
+              {/* 마우스를 감지하는 투명한 점들 */}
               {points.map((p, i) => (
-                <circle key={i} cx={p.x} cy={p.y} r="6" onMouseEnter={() => setTooltip(p)} className="hover-target" fill="transparent" style={{cursor: 'pointer'}} />
+                <circle
+                  key={i}
+                  cx={p.x}
+                  cy={p.y}
+                  r="8" // 마우스가 잘 닿도록 크게 잡음 (투명)
+                  fill="transparent"
+                  onMouseEnter={() => setTooltip(p)}
+                  className="cursor-pointer hover:stroke-white hover:stroke-2"
+                />
               ))}
 
+              {/* 툴팁 말풍선 그리기 */}
               {tooltip && (
                 <g>
-                  <circle cx={tooltip.x} cy={tooltip.y} r="3" className="tooltip-dot" />
-                  <rect x={tooltip.x > 220 ? tooltip.x - 85 : tooltip.x + 5} y={tooltip.y - 30} width="80" height="25" rx="4" className="tooltip-bg" />
-                  <text x={tooltip.x > 220 ? tooltip.x - 45 : tooltip.x + 45} y={tooltip.y - 13} className="tooltip-text">
-                    {tooltip.val.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
-                  </text>
-                  <text x={tooltip.x > 220 ? tooltip.x - 45 : tooltip.x + 45} y={tooltip.y - 2} fill="#94a3b8" fontSize="7" textAnchor="middle" fontWeight="bold">
-                    {tooltip.label}
+                  {/* 선택된 위치에 하얀 점 콕! 찍어주기 */}
+                  <circle cx={tooltip.x} cy={tooltip.y} r="3" fill="#fff" />
+                  
+                  {/* 말풍선 배경 네모 */}
+                  <rect
+                    x={tooltip.x > 200 ? tooltip.x - 75 : tooltip.x + 10} // 화면 밖으로 안 나가게 조절
+                    y={tooltip.y - 10}
+                    width="65"
+                    height="18"
+                    fill="#1e293b"
+                    rx="4"
+                  />
+                  
+                  {/* 말풍선 안의 가격 텍스트 */}
+                  <text
+                    x={tooltip.x > 200 ? tooltip.x - 42 : tooltip.x + 42}
+                    y={tooltip.y + 2}
+                    fill="#fff"
+                    fontSize="9"
+                    textAnchor="middle"
+                    fontWeight="bold"
+                  >
+                    {tooltip.val.toLocaleString('ko-KR', { maximumFractionDigits: tooltip.val < 1000 ? 2 : 0 })}
                   </text>
                 </g>
               )}
             </svg>
-            <div className="flex justify-between text-[8px] font-bold text-slate-500 mt-2 uppercase tracking-tighter">
-              <span>24h ago</span>
-              <span style={{ transform: `translateX(${nowX - 150}px)` }}>Now</span>
-              <span>12h later</span>
-            </div>
           </div>
 
           <button onClick={fetchAllData} className="w-full bg-white text-slate-950 font-black py-4 rounded-2xl shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2">
