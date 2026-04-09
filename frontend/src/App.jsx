@@ -1,507 +1,183 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { appConfig } from "./lib/config";
-import {
-  ContractError,
-  fetchHistory,
-  fetchManifestContract,
-  fetchPrediction,
-  fetchStatus,
-} from "./lib/api";
+import React, { useState, useEffect, useMemo } from 'react';
+import axios from 'axios';
+import { RefreshCw, Coins, ChevronRight } from 'lucide-react';
+import './styles/App.css';
 
-function numberText(value, digits = 2) {
-  if (!Number.isFinite(value)) {
-    return "-";
-  }
-  return value.toLocaleString("en-US", { maximumFractionDigits: digits });
-}
-
-function timeText(value) {
-  if (!value) {
-    return "-";
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return "-";
-  }
-  return date.toLocaleString("ko-KR", { hour12: false });
-}
-
-function buildLinePath(values, width, height) {
-  if (!Array.isArray(values) || values.length < 2) {
-    return "";
-  }
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-
-  return values
-    .map((value, index) => {
-      const x = (index / (values.length - 1)) * width;
-      const y = height - ((value - min) / range) * height;
-      return `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`;
-    })
-    .join(" ");
-}
-
-function PriceSparkline({ values }) {
-  if (!values || values.length < 2) {
-    return <div className="empty-inline">Not enough points</div>;
-  }
-  const path = buildLinePath(values, 340, 90);
-  return (
-    <svg className="sparkline" viewBox="0 0 340 90" role="img" aria-label="Price trend">
-      <defs>
-        <linearGradient id="sparkLineGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#7dd3fc" />
-          <stop offset="100%" stopColor="#22d3ee" />
-        </linearGradient>
-      </defs>
-      <path d={path} fill="none" stroke="url(#sparkLineGradient)" strokeWidth="2.8" />
-    </svg>
-  );
-}
+const EXCHANGE_RATE = 1380;
 
 export default function App() {
-  const [manifestState, setManifestState] = useState({
-    loading: true,
-    error: null,
-    generatedAt: null,
-    entries: [],
-    invalidEntries: [],
-  });
-  const [selectedKey, setSelectedKey] = useState(null);
-  const [searchText, setSearchText] = useState("");
-  const [timeframeFilter, setTimeframeFilter] = useState("ALL");
-  const [detailState, setDetailState] = useState({
-    loading: false,
-    error: null,
-    history: null,
-    prediction: null,
-    status: null,
-    sourceFingerprint: null,
-  });
+  const [allEntries, setAllEntries] = useState([]);
+  const [selectedSymbol, setSelectedSymbol] = useState('BTC/USDT');
+  const [price, setPrice] = useState(null);
+  const [combinedData, setCombinedData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [tooltip, setTooltip] = useState(null);
 
-  const entryFingerprintsRef = useRef(new Map());
-  const selectedKeyRef = useRef(null);
+  const fetchAllData = async () => {
+    setLoading(true);
+    try {
+      const res = await axios.get(`http://localhost/static/manifest.json?t=${Date.now()}`);
+      const entries = res.data.entries || [];
+      setAllEntries(entries);
+      
+      const currentEntry = entries.find(e => e.symbol === selectedSymbol);
+      if (currentEntry) {
+        const safeSymbol = selectedSymbol.replace('/', '_');
+        
+        try {
+          const [histRes, predRes] = await Promise.allSettled([
+            axios.get(`http://localhost/static/history_${safeSymbol}_1h.json?t=${Date.now()}`),
+            axios.get(`http://localhost/static/prediction_${safeSymbol}_1h.json?t=${Date.now()}`)
+          ]);
 
-  useEffect(() => {
-    selectedKeyRef.current = selectedKey;
-  }, [selectedKey]);
+          let hData = [];
+          let pData = [];
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const pollManifest = async () => {
-      try {
-        const payload = await fetchManifestContract();
-        if (cancelled) {
-          return;
-        }
-
-        const changedKeys = new Set();
-        const nextMap = new Map();
-        for (const entry of payload.entries) {
-          nextMap.set(entry.key, entry.fingerprint);
-          if (entryFingerprintsRef.current.get(entry.key) !== entry.fingerprint) {
-            changedKeys.add(entry.key);
+          if (histRes.status === 'fulfilled') {
+            hData = (histRes.value.data.data || []).slice(-24).map(d => ({
+              // 🔥 어떤 이름으로 오든 다 잡아내는 무적의 그물
+              val: Number(d.close || d.price || d.value || 0) * EXCHANGE_RATE,
+              type: 'history',
+              label: '과거 기록'
+            }));
           }
-        }
-        entryFingerprintsRef.current = nextMap;
 
-        const nextEntries = payload.entries.filter(
-          (entry) => entry.visibility !== "hidden_backfilling"
-        );
-        const selectedStillExists = nextEntries.some(
-          (entry) => entry.key === selectedKeyRef.current
-        );
-        if (!selectedStillExists) {
-          setSelectedKey(null);
-        }
+          if (predRes.status === 'fulfilled') {
+            pData = (predRes.value.data.forecast || []).slice(0, 12).map(d => {
+              // 🔥 실수로 빼먹었던 price 복구 완료!
+              const rawVal = d.yhat || d.close || d.price || d.value || 0; 
+              return {
+                val: Number(rawVal) * EXCHANGE_RATE,
+                type: 'prediction',
+                label: 'AI 예측'
+              };
+            });
+          }
 
-        setManifestState({
-          loading: false,
-          error: null,
-          generatedAt: payload.generatedAt,
-          entries: nextEntries,
-          invalidEntries: payload.invalidEntries,
-        });
+          // 🔥 만약 예측이 없으면 과거 마지막 가격을 현재가로 표시
+          const latestPrice = pData.length > 0 ? pData[0].val : (hData.length > 0 ? hData[hData.length-1].val : null);
+          setPrice(!isNaN(latestPrice) ? latestPrice : null);
+          setCombinedData([...hData, ...pData]);
 
-        if (selectedKeyRef.current && changedKeys.has(selectedKeyRef.current)) {
-          setDetailState((prev) => ({ ...prev, sourceFingerprint: null }));
+        } catch (e) {
+          console.error("파일 로드 중 오류:", e);
         }
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-        setManifestState((prev) => ({
-          ...prev,
-          loading: false,
-          error: error instanceof Error ? error.message : "Unknown manifest error",
-        }));
       }
-    };
-
-    pollManifest();
-
-    const getManifestInterval = () =>
-      document.hidden ? appConfig.hiddenTabManifestPollMs : appConfig.manifestPollMs;
-
-    let timer = window.setInterval(pollManifest, getManifestInterval());
-    const onVisibilityChange = () => {
-      window.clearInterval(timer);
-      timer = window.setInterval(pollManifest, getManifestInterval());
-    };
-    document.addEventListener("visibilitychange", onVisibilityChange);
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-      document.removeEventListener("visibilitychange", onVisibilityChange);
-    };
-  }, []);
-
-  const selectedEntry = useMemo(
-    () => manifestState.entries.find((entry) => entry.key === selectedKey) || null,
-    [manifestState.entries, selectedKey]
-  );
+      setLoading(false);
+    } catch (err) {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    let cancelled = false;
-    if (!selectedEntry) {
-      setDetailState({
-        loading: false,
-        error: null,
-        history: null,
-        prediction: null,
-        status: null,
-        sourceFingerprint: null,
-      });
-      return;
-    }
+    fetchAllData();
+  }, [selectedSymbol]);
 
-    if (!selectedEntry.serveAllowed) {
-      setDetailState({
-        loading: false,
-        error: `Blocked by policy: ${selectedEntry.blockReason || "not_available"}`,
-        history: null,
-        prediction: null,
-        status: null,
-        sourceFingerprint: selectedEntry.fingerprint,
-      });
-      return;
-    }
+  const { histPath, predPath, points, nowX } = useMemo(() => {
+    const validData = combinedData.filter(d => !isNaN(d.val) && d.val !== null);
+    if (!validData.length) return { histPath: "", predPath: "", points: [], nowX: 0 };
+    
+    const width = 300;
+    const height = 60;
+    const values = validData.map(d => d.val);
+    const min = Math.min(...values);
+    const max = Math.max(...values);
+    const range = (max - min) || 1;
 
-    if (detailState.sourceFingerprint === selectedEntry.fingerprint) {
-      return;
-    }
+    const pts = validData.map((d, i) => ({
+      x: (i / (validData.length - 1)) * width,
+      y: height - ((d.val - min) / range) * height,
+      val: d.val,
+      type: d.type,
+      label: d.label
+    }));
 
-    const loadDetail = async () => {
-      setDetailState((prev) => ({
-        ...prev,
-        loading: true,
-        error: null,
-      }));
-      try {
-        const [history, prediction, status] = await Promise.all([
-          fetchHistory(selectedEntry.symbol, selectedEntry.timeframe),
-          fetchPrediction(selectedEntry.symbol, selectedEntry.timeframe),
-          fetchStatus(selectedEntry.symbol, selectedEntry.timeframe),
-        ]);
-        if (cancelled) {
-          return;
-        }
-        setDetailState({
-          loading: false,
-          error: null,
-          history,
-          prediction,
-          status,
-          sourceFingerprint: selectedEntry.fingerprint,
-        });
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-        const message =
-          error instanceof ContractError
-            ? `Contract error: ${error.message}`
-            : error instanceof Error
-              ? error.message
-              : "Unknown detail error";
-        setDetailState((prev) => ({
-          ...prev,
-          loading: false,
-          error: message,
-          sourceFingerprint: selectedEntry.fingerprint,
-        }));
-      }
+    const hPts = pts.filter(p => p.type === 'history');
+    const pPts = pts.filter(p => p.type === 'prediction');
+    const pPathPts = hPts.length > 0 ? [hPts[hPts.length - 1], ...pPts] : pPts;
+
+    return {
+      histPath: hPts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" "),
+      predPath: pPathPts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" "),
+      points: pts,
+      nowX: hPts.length > 0 ? hPts[hPts.length - 1].x : 0
     };
+  }, [combinedData]);
 
-    loadDetail();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedEntry, detailState.sourceFingerprint]);
-
-  useEffect(() => {
-    if (!selectedEntry || !selectedEntry.serveAllowed) {
-      return;
-    }
-
-    let cancelled = false;
-    const pollStatus = async () => {
-      try {
-        const status = await fetchStatus(selectedEntry.symbol, selectedEntry.timeframe);
-        if (cancelled) {
-          return;
-        }
-        setDetailState((prev) => ({
-          ...prev,
-          status,
-        }));
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-        setDetailState((prev) => ({
-          ...prev,
-          error: error instanceof Error ? error.message : "Status polling failed",
-        }));
-      }
-    };
-
-    const timer = window.setInterval(pollStatus, appConfig.statusPollMs);
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [selectedEntry]);
-
-  const timeframes = useMemo(() => {
-    const set = new Set();
-    for (const entry of manifestState.entries) {
-      set.add(entry.timeframe);
-    }
-    return ["ALL", ...Array.from(set).sort()];
-  }, [manifestState.entries]);
-
-  const filteredEntries = useMemo(() => {
-    const keyword = searchText.trim().toUpperCase();
-    return manifestState.entries.filter((entry) => {
-      if (timeframeFilter !== "ALL" && entry.timeframe !== timeframeFilter) {
-        return false;
-      }
-      if (!keyword) {
-        return true;
-      }
-      return (
-        entry.symbol.toUpperCase().includes(keyword) ||
-        entry.timeframe.toUpperCase().includes(keyword)
-      );
-    });
-  }, [manifestState.entries, searchText, timeframeFilter]);
-
-  const summary = useMemo(() => {
-    const counts = {
-      total: filteredEntries.length,
-      fresh: 0,
-      stale: 0,
-      blocked: 0,
-      degraded: 0,
-    };
-    for (const entry of filteredEntries) {
-      if (entry.status === "fresh") {
-        counts.fresh += 1;
-      }
-      if (entry.status === "stale") {
-        counts.stale += 1;
-      }
-      if (!entry.serveAllowed) {
-        counts.blocked += 1;
-      }
-      if (entry.degraded) {
-        counts.degraded += 1;
-      }
-    }
-    return counts;
-  }, [filteredEntries]);
+  const strokeColor = selectedSymbol.includes('BTC') ? "#7dd3fc" : "#f472b6";
 
   return (
-    <div className="app-shell">
-      <header className="hero">
-        <p className="eyebrow">AIOps User Plane</p>
-        <h1>Anti-Coin Frontend Console</h1>
-        <p className="subtext">
-          Backend-blind UI. Contract first. Fail closed on wrong exposure.
-        </p>
-        <div className="hero-meta">
-          <span>Manifest: {timeText(manifestState.generatedAt)}</span>
-          <span>Manifest Poll: {appConfig.manifestPollMs / 1000}s</span>
-          <span>Status Poll: {appConfig.statusPollMs / 1000}s</span>
-        </div>
-      </header>
-
-      <section className="summary-grid">
-        <article className="summary-card">
-          <h2>Total</h2>
-          <p>{summary.total}</p>
-        </article>
-        <article className="summary-card">
-          <h2>Fresh</h2>
-          <p>{summary.fresh}</p>
-        </article>
-        <article className="summary-card">
-          <h2>Stale</h2>
-          <p>{summary.stale}</p>
-        </article>
-        <article className="summary-card">
-          <h2>Blocked</h2>
-          <p>{summary.blocked}</p>
-        </article>
-      </section>
-
-      <section className="panel controls">
-        <label>
-          Search
-          <input
-            value={searchText}
-            onChange={(event) => setSearchText(event.target.value)}
-            placeholder="BTC, DOGE, 1h..."
-          />
-        </label>
-        <label>
-          Timeframe
-          <select
-            value={timeframeFilter}
-            onChange={(event) => setTimeframeFilter(event.target.value)}
-          >
-            {timeframes.map((timeframe) => (
-              <option key={timeframe} value={timeframe}>
-                {timeframe}
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
-
-      {manifestState.error && (
-        <section className="panel error-panel">
-          <strong>Manifest Error</strong>
-          <p>{manifestState.error}</p>
-        </section>
-      )}
-
-      {manifestState.invalidEntries.length > 0 && (
-        <section className="panel warning-panel">
-          <strong>Contract Warning</strong>
-          <p>{manifestState.invalidEntries.length} entries were dropped due to contract mismatch.</p>
-        </section>
-      )}
-
-      <section className="panel">
-        <h2>Market Overview</h2>
-        {manifestState.loading ? (
-          <p className="muted">Loading manifest...</p>
-        ) : filteredEntries.length === 0 ? (
-          <p className="muted">No visible entries for current filter.</p>
-        ) : (
-          <div className="entry-grid">
-            {filteredEntries.map((entry, index) => (
-              <article
-                className={`entry-card ${selectedEntry?.key === entry.key ? "active" : ""}`}
-                key={entry.key}
-                style={{ animationDelay: `${40 * (index % 10)}ms` }}
-              >
-                <div className="entry-head">
-                  <h3>{entry.symbol}</h3>
-                  <span className="timeframe-pill">{entry.timeframe}</span>
-                </div>
-                <div className="badge-row">
-                  <span className={`badge status-${entry.status}`}>{entry.status}</span>
-                  {entry.degraded && <span className="badge degraded">degraded</span>}
-                  {!entry.serveAllowed && <span className="badge blocked">blocked</span>}
-                </div>
-                <p className="meta-line">Prediction: {timeText(entry.predictionUpdatedAt)}</p>
-                <p className="meta-line">History: {timeText(entry.historyUpdatedAt)}</p>
-                <button
-                  className="open-btn"
-                  disabled={!entry.serveAllowed}
-                  onClick={() => setSelectedKey(entry.key)}
-                >
-                  {entry.serveAllowed
-                    ? "Open Detail"
-                    : `Blocked (${entry.blockReason || "policy"})`}
-                </button>
-              </article>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="panel detail-panel">
-        <h2>Symbol Detail</h2>
-        {!selectedEntry ? (
-          <p className="muted">Select an available entry from Market Overview.</p>
-        ) : (
-          <>
-            <div className="detail-head">
-              <h3>
-                {selectedEntry.symbol} / {selectedEntry.timeframe}
-              </h3>
-              <div className="badge-row">
-                <span className={`badge status-${selectedEntry.status}`}>
-                  {selectedEntry.status}
-                </span>
-                {detailState.status?.degraded && (
-                  <span className="badge degraded">degraded</span>
-                )}
+    <div className="app-container">
+      <main className="main-layout">
+        <aside className="coin-list-side">
+          <h2 className="text-2xl font-black mb-6 opacity-90 tracking-tight">Market Overview</h2>
+          {allEntries.map((entry) => (
+            <div key={entry.key} onClick={() => setSelectedSymbol(entry.symbol)} className={`mini-coin-card ${selectedSymbol === entry.symbol ? 'active' : ''}`}>
+              <div>
+                <p className="font-bold text-lg">{entry.symbol.split('/')[0]}</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">1h interval</p>
               </div>
+              <ChevronRight size={16} className="opacity-30" />
             </div>
-            {detailState.loading && <p className="muted">Loading detail payloads...</p>}
-            {detailState.error && <p className="error-text">{detailState.error}</p>}
-            {!detailState.loading && !detailState.error && detailState.history && detailState.prediction && (
-              <div className="detail-grid">
-                <article className="detail-card">
-                  <h4>History Close Trend</h4>
-                  <PriceSparkline
-                    values={detailState.history.data.slice(-120).map((item) => item.close)}
-                  />
-                  <p className="meta-line">
-                    points: {detailState.history.data.length} / updated:{" "}
-                    {timeText(detailState.history.updatedAt)}
-                  </p>
-                </article>
-                <article className="detail-card">
-                  <h4>Forecast Price Trend</h4>
-                  <PriceSparkline
-                    values={detailState.prediction.forecast.slice(-60).map((item) => item.price)}
-                  />
-                  <p className="meta-line">
-                    points: {detailState.prediction.forecast.length} / updated:{" "}
-                    {timeText(detailState.prediction.updatedAt)}
-                  </p>
-                </article>
-                <article className="detail-card">
-                  <h4>Status Signal</h4>
-                  <p className="meta-line">status: {detailState.status?.status || "-"}</p>
-                  <p className="meta-line">
-                    age minutes: {numberText(detailState.status?.ageMinutes, 1)}
-                  </p>
-                  <p className="meta-line">
-                    updated: {timeText(detailState.status?.updatedAt)}
-                  </p>
-                  {detailState.status?.warning && (
-                    <p className="warning-text">{detailState.status.warning}</p>
-                  )}
-                  {detailState.status?.degradedReason && (
-                    <p className="warning-text">degraded: {detailState.status.degradedReason}</p>
-                  )}
-                </article>
-              </div>
-            )}
-          </>
-        )}
-      </section>
+          ))}
+        </aside>
+
+        <div className="glass-card">
+          <div className="flex justify-between items-start mb-10 relative z-10">
+            <div className="bg-gradient-to-br from-orange-400 to-orange-600 p-4 rounded-2xl shadow-lg"><Coins size={28} /></div>
+            <div className="bg-emerald-500/20 px-3 py-1.5 rounded-full border border-emerald-500/30">
+              <span className="text-emerald-400 flex items-center text-[10px] font-black uppercase tracking-wider animate-pulse">
+                Live Terminal
+              </span>
+            </div>
+          </div>
+          
+          <div className="mb-8 relative z-10">
+            <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">{selectedSymbol.split('/')[0]} Price Index</p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-5xl font-black tracking-tighter text-white">
+                {price !== null && !isNaN(price) ? price.toLocaleString('ko-KR', { maximumFractionDigits: 0 }) : "---"}
+              </span>
+              <span className="text-slate-500 font-bold text-lg">KRW</span>
+            </div>
+          </div>
+
+          <div className="mb-10 opacity-80 relative z-10">
+            <svg className="w-full h-16 overflow-visible" viewBox="0 0 300 60" onMouseLeave={() => setTooltip(null)}>
+              <line x1={nowX} y1="0" x2={nowX} y2="60" className="now-line" />
+              
+              <path d={histPath} fill="none" className="path-history" />
+              <path d={predPath} fill="none" stroke={strokeColor} className="path-prediction" />
+              
+              {points.map((p, i) => (
+                <circle key={i} cx={p.x} cy={p.y} r="6" onMouseEnter={() => setTooltip(p)} className="hover-target" fill="transparent" style={{cursor: 'pointer'}} />
+              ))}
+
+              {tooltip && (
+                <g>
+                  <circle cx={tooltip.x} cy={tooltip.y} r="3" className="tooltip-dot" />
+                  <rect x={tooltip.x > 220 ? tooltip.x - 85 : tooltip.x + 5} y={tooltip.y - 30} width="80" height="25" rx="4" className="tooltip-bg" />
+                  <text x={tooltip.x > 220 ? tooltip.x - 45 : tooltip.x + 45} y={tooltip.y - 13} className="tooltip-text">
+                    {tooltip.val.toLocaleString('ko-KR', { maximumFractionDigits: 0 })}
+                  </text>
+                  <text x={tooltip.x > 220 ? tooltip.x - 45 : tooltip.x + 45} y={tooltip.y - 2} fill="#94a3b8" fontSize="7" textAnchor="middle" fontWeight="bold">
+                    {tooltip.label}
+                  </text>
+                </g>
+              )}
+            </svg>
+            <div className="flex justify-between text-[8px] font-bold text-slate-500 mt-2 uppercase tracking-tighter">
+              <span>24h ago</span>
+              <span style={{ transform: `translateX(${nowX - 150}px)` }}>Now</span>
+              <span>12h later</span>
+            </div>
+          </div>
+
+          <button onClick={fetchAllData} className="w-full bg-white text-slate-950 font-black py-4 rounded-2xl shadow-xl active:scale-95 transition-all flex items-center justify-center gap-2">
+            <RefreshCw size={18} className={loading ? "animate-spin" : ""} /> 데이터 갱신
+          </button>
+        </div>
+      </main>
     </div>
   );
 }

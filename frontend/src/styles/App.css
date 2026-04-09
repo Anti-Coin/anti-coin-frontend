@@ -1,0 +1,138 @@
+/* 기본 레이아웃 및 배경 */
+.app-container {
+  min-height: 100vh;
+  background: linear-gradient(to bottom right, #312e81, #0f172a, #581c87);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  color: white;
+  font-family: sans-serif;
+  transition: all 500ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* 데스크탑 그리드 레이아웃 */
+.main-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+  width: 100%;
+  max-width: 68rem;
+  align-items: center;
+}
+
+/* 1024px 이상(데스크탑)에서 가로 배치 */
+@media (min-width: 1024px) {
+  .main-layout {
+    flex-direction: row;
+    align-items: stretch;
+    justify-content: center;
+  }
+}
+
+/* 왼쪽 사이드바 (데스크탑 전용) */
+.coin-list-side {
+  display: none; /* 모바일에선 숨김 */
+}
+
+@media (min-width: 1024px) {
+  .coin-list-side {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    width: 22rem;
+  }
+}
+
+.mini-coin-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1.25rem;
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.mini-coin-card:hover { background: rgba(255, 255, 255, 0.08); }
+.mini-coin-card.active {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: white;
+  transform: translateX(10px);
+}
+
+/* 메인 유리창 카드 */
+.glass-card {
+  width: 100%;
+  max-width: 24rem;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 2.5rem;
+  padding: 2rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  position: relative;
+  overflow: hidden;
+}
+
+/* 상단 모바일 탭 */
+.tabs-container {
+  width: 100%;
+  max-width: 24rem;
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+}
+.tabs-container::-webkit-scrollbar { display: none; }
+
+.tab-button {
+  flex-shrink: 0;
+  padding: 0.6rem 1.2rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: all 300ms ease;
+}
+.tab-button.active { background: white; color: #0f172a; transform: scale(1.05); }
+
+/* 그래프 선 애니메이션 */
+.sparkline-path {
+  transition: all 1000ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.animate-spin-custom { animation: spin 1s linear infinite; }
+
+/* 🕰️ 과거 데이터: 차분한 회색 점선 */
+.path-history {
+  stroke: #64748b;
+  stroke-width: 2;
+  stroke-dasharray: 4 2;
+}
+
+/* 🚀 미래 예측: 포인트 컬러 실선 */
+.path-prediction {
+  stroke-width: 3;
+}
+
+/* 📍 현재 시점(NOW) 가이드라인 */
+.now-line {
+  stroke: #ffffff;
+  stroke-width: 1;
+  stroke-dasharray: 2;
+  opacity: 0.4;
+}
+
+/* 🎈 툴팁 텍스트 스타일 */
+.tooltip-text {
+  fill: #ffffff;
+  font-size: 10px;
+  font-weight: 900;
+  text-anchor: middle;
+}
