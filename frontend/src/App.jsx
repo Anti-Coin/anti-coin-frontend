@@ -14,7 +14,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [tooltip, setTooltip] = useState(null);
 
-  const BASE_URL = import.meta.env.VITE_STATIC_BASE_URL || 'http://168.107.56.63';
+ const BASE_URL = import.meta.env.VITE_STATIC_BASE_URL;
 
   const fetchAllData = async () => {
     try {
