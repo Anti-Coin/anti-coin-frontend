@@ -8,6 +8,7 @@ const EXCHANGE_RATE = 1380;
 export default function App() {
   const [allEntries, setAllEntries] = useState([]);
   const [selectedSymbol, setSelectedSymbol] = useState('BTC/USDT');
+  const [timeframe, setTimeframe] = useState('1h');
   const [price, setPrice] = useState(null);
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,13 +28,14 @@ export default function App() {
         const status = (currentEntry.prediction?.status || currentEntry.status || '').toLowerCase();
         if (status === 'fresh') {
           const safeSymbol = selectedSymbol || 'BTC/USDT';
-          const fileName = `prediction_${safeSymbol.replace('/', '_')}_1h.json`; 
+          const fileName = `prediction_${safeSymbol.replace('/', '_')}_${timeframe}.json`;
           try {
             const priceRes = await axios.get(`${BASE_URL}/static/${fileName}?t=${Date.now()}`);
             const data = priceRes.data;
             if (data.forecast && Array.isArray(data.forecast) && data.forecast.length > 0) {
               const currentData = data.forecast[0]; 
               const dollarPrice = currentData.yhat || currentData.close || currentData.price || 0;
+              console.log("🔥 원본 달러 가격:", dollarPrice, "달러");
               setPrice(dollarPrice * EXCHANGE_RATE);
               const krwHistory = data.forecast.map(item => (item.yhat || item.close || item.price || 0) * EXCHANGE_RATE);
               setHistory(krwHistory.slice(0, 14)); 
@@ -55,7 +57,7 @@ export default function App() {
 
   useEffect(() => {
     fetchAllData();
-  }, [selectedSymbol]);
+  }, [selectedSymbol, timeframe]);
 
   const safeSymbol = selectedSymbol || '---';
   const displaySymbol = safeSymbol.split('/')[0];
@@ -138,6 +140,21 @@ export default function App() {
             <p className="text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">
               {displaySymbol} Price Index
             </p>
+            <div className="flex gap-2 mb-4">
+              {['1h','1d'].map((tf) => (
+                <button
+                  key={tf}
+                  onClick={() => setTimeframe(tf)}
+                  className={`px-3 py-1 rounded-lg text-[10px] font-black tracking-wider uppercase transition-all ${
+                    timeframe === tf 
+                      ? 'bg-orange-500 text-white shadow-lg shadow-orange-500/30' 
+                      : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                  }`}
+                >
+                  {tf}
+                </button>
+              ))}
+            </div>
             <div className="flex items-baseline gap-2">
               <span className="text-5xl font-black tracking-tighter text-white">
                 {price !== null ? price.toLocaleString('ko-KR', { maximumFractionDigits: price < 1000 ? 2 : 0 }) : "---"}
