@@ -18,6 +18,7 @@ export default function App() {
  const BASE_URL = import.meta.env.VITE_STATIC_BASE_URL;
 
   const fetchAllData = async () => {
+    setLoading(true);
     try {
       const res = await axios.get(`${BASE_URL}/static/manifest.json?t=${Date.now()}`);
       const entries = res.data.entries || [];
@@ -78,6 +79,52 @@ export default function App() {
     const p = pts.map((pt, i) => `${i === 0 ? "M" : "L"} ${pt.x} ${pt.y}`).join(" ");
     return { path: p, points: pts };
   }, [history]);
+  if (loading) {
+    return (
+      <div className="app-container">
+        {/* 상단 탭 로딩 뼈대 */}
+        <div className="tabs-container lg:hidden no-scrollbar flex gap-2">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-10 w-20 bg-slate-800/60 rounded-xl animate-pulse"></div>
+          ))}
+        </div>
+
+        <main className="main-layout">
+          {/* 왼쪽 코인 리스트 로딩 뼈대 */}
+          <aside className="coin-list-side">
+            <div className="h-8 w-40 bg-slate-800/60 rounded-lg animate-pulse mb-6"></div>
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-20 w-full bg-slate-800/40 rounded-2xl animate-pulse mb-3"></div>
+            ))}
+          </aside>
+          
+          {/* 오른쪽 메인 카드 로딩 뼈대 */}
+          <div className="glass-card">
+            <div className="flex justify-between items-start mb-10">
+              <div className="w-14 h-14 bg-slate-800/60 rounded-2xl animate-pulse"></div>
+              <div className="w-24 h-8 bg-slate-800/60 rounded-full animate-pulse"></div>
+            </div>
+            
+            <div className="mb-8">
+              <div className="h-3 w-32 bg-slate-800/40 rounded mb-3 animate-pulse"></div>
+              {/* 타임프레임 버튼 뼈대 */}
+              <div className="flex gap-2 mb-4">
+                <div className="h-6 w-12 bg-slate-800/60 rounded-lg animate-pulse"></div>
+                <div className="h-6 w-12 bg-slate-800/60 rounded-lg animate-pulse"></div>
+              </div>
+              <div className="h-12 w-64 bg-slate-800/60 rounded-lg animate-pulse mb-4"></div>
+            </div>
+
+            {/* 차트 영역 뼈대 */}
+            <div className="h-24 w-full bg-slate-800/30 rounded-xl animate-pulse mb-10"></div>
+            
+            {/* 버튼 뼈대 */}
+            <div className="h-14 w-full bg-slate-800/80 rounded-2xl animate-pulse"></div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="app-container">
