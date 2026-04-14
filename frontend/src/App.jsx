@@ -90,7 +90,7 @@ export default function App() {
         </div>
 
         <main className="main-layout">
-          {/* 왼쪽 코인 리스트 로딩 뼈대 */}
+          {/* 코인 리스트 로딩 뼈대 */}
           <aside className="coin-list-side">
             <div className="h-8 w-40 bg-slate-800/60 rounded-lg animate-pulse mb-6"></div>
             {[1, 2, 3, 4].map((i) => (
