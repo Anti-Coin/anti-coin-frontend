@@ -179,7 +179,7 @@ export default function App() {
             <div className="bg-emerald-500/20 px-3 py-1.5 rounded-full border border-emerald-500/30">
               <span className="text-emerald-400 flex items-center text-[10px] font-black uppercase tracking-wider">
                 <div className="w-1.5 h-1.5 bg-emerald-400 rounded-full mr-2 animate-pulse" />
-                Live Terminal
+                Live
               </span>
             </div>
           </div>
