@@ -44,7 +44,6 @@ export default function App() {
             const data = priceRes.data;
             if (data.forecast && Array.isArray(data.forecast) && data.forecast.length > 0) {
               const currentData = data.forecast[0];
-              // 실제 백엔드가 yhat, close, price 등 다양한 키로 데이터를 혼용해서 주는 것이 확인되었으므로 원복!
               const dollarPrice = currentData.yhat || currentData.close || currentData.price || 0;
               setPrice(dollarPrice * EXCHANGE_RATE);
               const krwHistory = data.forecast.map(item => (item.yhat || item.close || item.price || 0) * EXCHANGE_RATE);
@@ -199,7 +198,6 @@ export default function App() {
             );
           })}
         </aside>
-        {/* 데이터를 다시 불러오는(새로고침) 중일 때는 화면을 반투명하게 만들어 부드럽게 처리합니다 */}
         <div className={`glass-card transition-all duration-300 ${loading ? 'opacity-50 pointer-events-none animate-pulse' : 'opacity-100'}`}>
           <div className="flex justify-between items-start mb-10 relative z-10">
             <div className="bg-gradient-to-br from-orange-400 to-orange-600 p-4 rounded-2xl shadow-lg">
@@ -252,7 +250,7 @@ export default function App() {
                   r="8"
                   fill="transparent"
                   onMouseEnter={() => setTooltip(p)}
-                  onTouchStart={() => setTooltip(p)} // 모바일 터치 이벤트 추가 (4번 항목)
+                  onTouchStart={() => setTooltip(p)} // 모바일
                   className="cursor-pointer"
                 />
               ))}
