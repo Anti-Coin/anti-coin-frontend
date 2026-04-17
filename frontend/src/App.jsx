@@ -85,7 +85,6 @@ export default function App() {
     const p = pts.map((pt, i) => `${i === 0 ? "M" : "L"} ${pt.x} ${pt.y}`).join(" ");
     return { path: p, points: pts };
   }, [history]);
-  // 처음 화면에 들어와서 데이터가 아예 없을 때만 전체 스켈레톤 로딩창을 띄웁니다.
   if (loading && allEntries.length === 0) {
     return (
       <div className="app-container">
