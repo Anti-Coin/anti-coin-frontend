@@ -124,7 +124,7 @@ export default function App() {
             {/* 차트 영역뼈대 */}
             <div className="h-24 w-full bg-slate-800/30 rounded-xl animate-pulse mb-10"></div>
 
-            {/* 버튼 뼈대 */}
+            {/* 버튼 뼈 */}
             <div className="h-14 w-full bg-slate-800/80 rounded-2xl animate-pulse"></div>
           </div>
         </main>
