@@ -127,7 +127,7 @@ export default function App() {
     } catch (err) {
       if (requestId !== requestIdRef.current) return;
 
-      setError("연결 확인 중...");
+      setError("연결 확인 중..");
       setPrice(null);
       setHistory([]);
       setTooltip(null);
