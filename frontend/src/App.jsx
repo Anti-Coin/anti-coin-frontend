@@ -131,7 +131,7 @@ export default function App() {
       setPrice(null);
       setHistory([]);
       setTooltip(null);
-      addLog('API 연결 실패. 네트워크를 확인하세요.', 'error');
+      addLog('API 연결 실패. 네트워크를 확인하세요...', 'error');
     } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false);
